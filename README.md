@@ -7,8 +7,11 @@
 ### 启发式算法：
 启发式方法是人们在解决问题时所采取的一种根据经验规则来处理问题的方法。其特点是在解决问题时，利用过去的经验，选择已经行之有效的方法，而不是系统地、按照确定的步骤去寻求答案。但由于这种方法具有试错的特点，所以也有失败的可能。
 启发式方法是一种非常高效的解决问题方法，对于NP完全类的组合优化问题，目前缺少一般的算法来求解，精确算法又太耗时，所以启发式算法被广泛应用到这些问题的求解中。对于装箱问题亦是如此，自从该问题被提出以来，已经有很多启发式算法应用其中。
+### 算法流程
+<img width="257" alt="image" src="https://user-images.githubusercontent.com/72080671/210927333-6317df6d-2419-40ed-9c4f-ecd794d65893.png">
 
-具体代码：
+具体代码如下：
+#### 基础启发式算法
 ```cpp
 vector<Block> GenSimpleBlock(Space container, vector<Box> box, vector<int> num) {
 	vector<Block> blockTable;
@@ -37,3 +40,114 @@ vector<Block> GenSimpleBlock(Space container, vector<Box> box, vector<int> num) 
 	return blockTable;
 }
 ```
+#### 生成可行块列表
+```cpp
+vector<Block> GenBlocklist(Space space, vector<int> avail) {
+	vector<Block> blockList;
+	for (Block block : BlockTable) {
+		int boxnum = (int)avail.size();
+		int flag = 1;
+		for (int i = 0; i < boxnum; i++) {
+			if (block.require[i] > avail[i]) {
+				flag = 0;
+				break;
+			}
+		}
+		if (flag == 0)
+			continue;
+
+		if (block.lx <= space.lx && block.ly <= space.ly && block.lz <= space.lz)
+			blockList.push_back(block);
+		if (blockList.size() >= MaxBlocks)
+			break;
+	}
+	return blockList;
+}
+```
+#### 空间切割算法
+```cpp
+vector<Space> GenResidualSpace(Space space, Block block) {
+	int mx = space.lx - block.lx;
+	int my = space.ly - block.ly;
+	int mz = space.lz - block.lz;
+	vector<Space> ret;
+	Space X, Y, Z;
+	if (my >= mx && mx >= mz) {
+		X = GenSpace(space.x + block.lx, space.y, space.z, mx, block.ly, space.lz);
+		Y = GenSpace(space.x, space.y + block.ly, space.z, space.lx, my, space.lz);
+		Z = GenSpace(space.x, space.y, space.z + block.lz, block.lx, block.ly, mz);
+		ret.push_back(Z);
+		ret.push_back(X);
+		ret.push_back(Y);
+	} else if (mx >= my && my >= mz) {
+		X = GenSpace(space.x + block.lx, space.y, space.z, mx, space.ly, space.lz);
+		Y = GenSpace(space.x, space.y + block.ly, space.z, block.lx, my, space.lz);
+		Z = GenSpace(space.x, space.y, space.z + block.lz, block.lx, block.ly, mz);
+		ret.push_back(Z);
+		ret.push_back(Y);
+		ret.push_back(X);	
+	} else if (my >= mz && mz >= mx) {
+		X = GenSpace(space.x + block.lx, space.y, space.z, mx, block.ly, block.lz);
+		Y = GenSpace(space.x, space.y + block.ly, space.z, space.lx, my, space.lz);
+		Z = GenSpace(space.x, space.y, space.z + block.lz, space.lx, block.ly, mz);
+		ret.push_back(X);
+		ret.push_back(Z);
+		ret.push_back(Y);		
+	} else if (mz >= my && my >= mx) {
+		X = GenSpace(space.x + block.lx, space.y, space.z, mx, block.ly, block.lz);
+		Y = GenSpace(space.x, space.y + block.ly, space.z, space.lx, my, block.lz);
+		Z = GenSpace(space.x, space.y, space.z + block.lz, space.lx, space.ly, mz);
+		ret.push_back(X);
+		ret.push_back(Y);
+		ret.push_back(Z);	
+	} else if (mx >= mz && mz >= my) {
+		X = GenSpace(space.x + block.lx, space.y, space.z, mx, space.ly, space.lz);
+		Y = GenSpace(space.x, space.y + block.ly, space.z, block.lx, my, block.lz);
+		Z = GenSpace(space.x, space.y, space.z + block.lz, block.lx, space.ly, mz);
+		ret.push_back(Y);
+		ret.push_back(Z);
+		ret.push_back(X);
+	} else if (mz >= mx && mx >= my) {
+		X = GenSpace(space.x + block.lx, space.y, space.z, mx, space.ly, block.lz);
+		Y = GenSpace(space.x, space.y + block.ly, space.z, block.lx, my, block.lz);
+		Z = GenSpace(space.x, space.y, space.z + block.lz, space.lx, space.ly, mz);
+		ret.push_back(Y);
+		ret.push_back(X);
+		ret.push_back(Z);	
+	}
+	return ret;
+}
+```
+#### 块选择算法
+```cpp
+void DepthFirstSearch(PakingState ps, int depth) {
+	if (depth != DEPTH) {
+		if (ps.spaceStack.empty())
+			return;
+		Space space = ps.spaceStack.top();
+		vector<Block> blockList = GenBlocklist(space, ps.avail);
+		if (!blockList.empty()) {
+			for (int i = 0; i < min((int)blockList.size(), BRANCH); i++) {
+				PlaceBlock(&ps, blockList[i]);
+				DepthFirstSearch(ps, depth + 1);
+				RemoveBlock(&ps, space, blockList[i]);
+			}
+		}
+		else {
+			ps.spaceStack.pop();
+			DepthFirstSearch(ps, depth);
+			ps.spaceStack.push(space);
+		}
+	}
+	else {
+		Complete(&ps);
+		if (ps.volumnComplete > best.volumnComplete) {
+			best = ps;
+		}
+	}
+}
+```
+### 运行结果
+![IJ16EB}E679JNHPS7JOWH{9](https://user-images.githubusercontent.com/72080671/210928261-f1852476-e030-433e-a972-f88d9d261a04.png)
+
+可以看到，总体的空间利用率保持在85-90%之间，运行速度在15种箱子的情况下也能保证在几分钟内得出结果
